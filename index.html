@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TodoWall</title>
+<style>
+:root{--bg:#f6f6f3;--card:#fff;--tx:#1c1c1a;--mu:#76766f;--ac:#4f46e5;--bd:#e3e3dd;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121214;--card:#1c1c20;--tx:#f0f0ee;--mu:#9a9aa3;--ac:#8b85ff;--bd:#2c2c32}}
+:root[data-theme="dark"]{--bg:#121214;--card:#1c1c20;--tx:#f0f0ee;--mu:#9a9aa3;--ac:#8b85ff;--bd:#2c2c32}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:920px;margin:0 auto;padding:20px;display:grid;gap:20px;grid-template-columns:1fr}
+@media(min-width:760px){main{grid-template-columns:1fr 300px;align-items:start}}
+h1{font-size:22px;margin:0 0 4px}.sub{color:var(--mu);font-size:14px;margin:0 0 16px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:16px}
+form,.row{display:flex;gap:8px}
+input[type=text]{flex:1;min-width:0;padding:12px;border-radius:10px;border:1px solid var(--bd);background:var(--bg);color:var(--tx);font:inherit}
+button{font:inherit;border:0;border-radius:10px;padding:10px 14px;background:var(--ac);color:#fff;cursor:pointer}
+button.g{background:transparent;color:var(--mu);border:1px solid var(--bd)}
+ul{list-style:none;margin:14px 0 0;padding:0}
+li{display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--bd)}
+li span{flex:1;word-break:break-word}li.d span{text-decoration:line-through;color:var(--mu)}
+li input{width:20px;height:20px;accent-color:var(--ac)}
+li button{padding:4px 10px}
+.pv{display:flex;flex-direction:column;gap:10px;align-items:center}
+canvas{width:100%;max-width:260px;border-radius:22px;border:1px solid var(--bd)}
+.opts{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+label.t{font-size:14px;color:var(--mu);display:flex;gap:6px;align-items:center}
+.note{font-size:13px;color:var(--mu);margin-top:12px}
+</style>
+</head>
+<body>
+<main>
+<section class="card">
+  <h1>TodoWall</h1>
+  <p class="sub">Every change redraws your wallpaper.</p>
+  <form id="f"><input type="text" id="in" placeholder="Add a task…" autocomplete="off"><button>Add</button></form>
+  <ul id="l"></ul>
+  <p class="note" id="empty" hidden>Nothing yet. Add your first task.</p>
+</section>
+<aside class="card pv">
+  <canvas id="c" width="1170" height="2532"></canvas>
+  <div class="opts" id="th"></div>
+  <div class="row"><button id="dl">Save PNG</button><button class="g" id="sh">Share</button></div>
+  <label class="t"><input type="checkbox" id="au"> Auto-save PNG on every change</label>
+  <p class="note">Browsers can't set a wallpaper directly. Save or share the image, then set it as wallpaper. For full automation, use iOS Shortcuts or Android Tasker with a hosted image URL.</p>
+</aside>
+</main>
+<script>
+var KEY="todowall.v1",themes={
+ Midnight:["#0b0b14","#1a1a2e","#f2f2f7","#8b85ff"],
+ Forest:["#07130e","#10281c","#ecf7ef","#4ade80"],
+ Sunset:["#1a0b14","#3a1630","#fff1ee","#fb923c"],
+ Paper:["#f5f3ee","#e8e4da","#1c1c1a","#4f46e5"]};
+var S={todos:[],theme:"Midnight",auto:false},timer;
+try{var raw=localStorage.getItem(KEY);if(raw)S=Object.assign(S,JSON.parse(raw))}catch(e){}
+var $=function(i){return document.getElementById(i)};
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+function wrap(x,t,w){var words=t.split(" "),lines=[],cur="";words.forEach(function(wd){var n=cur?cur+" "+wd:wd;if(x.measureText(n).width>w&&cur){lines.push(cur);cur=wd}else cur=n});if(cur)lines.push(cur);return lines}
+function draw(){
+ var cv=$("c"),x=cv.getContext("2d"),W=cv.width,H=cv.height,t=themes[S.theme];
+ var g=x.createLinearGradient(0,0,0,H);g.addColorStop(0,t[0]);g.addColorStop(1,t[1]);x.fillStyle=g;x.fillRect(0,0,W,H);
+ var P=90,y=Math.round(H*.36),font="system-ui,-apple-system,Segoe UI,Roboto,sans-serif";
+ var done=S.todos.filter(function(a){return a.d}).length,tot=S.todos.length;
+ x.textBaseline="top";x.fillStyle=t[2];x.font="700 76px "+font;x.fillText("Today",P,y);
+ x.globalAlpha=.6;x.font="400 38px "+font;
+ x.fillText(new Date().toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"})+(tot?"  ·  "+done+"/"+tot:""),P,y+92);x.globalAlpha=1;
+ y+=170;
+ if(tot){x.fillStyle=t[2];x.globalAlpha=.15;x.fillRect(P,y,W-2*P,10);x.globalAlpha=1;x.fillStyle=t[3];x.fillRect(P,y,(W-2*P)*done/tot,10)}
+ y+=60;
+ var items=S.todos.slice().sort(function(a,b){return a.d-b.d}),max=H-150;
+ x.font="500 52px "+font;
+ for(var i=0;i<items.length;i++){
+  var it=items[i],ls=wrap(x,it.t,W-2*P-100),h=ls.length*66+34;
+  if(y+h>max){x.globalAlpha=.6;x.fillStyle=t[2];x.fillText("+ "+(items.length-i)+" more",P,y);x.globalAlpha=1;break}
+  x.lineWidth=5;x.strokeStyle=it.d?t[3]:t[2];x.globalAlpha=it.d?1:.55;
+  x.beginPath();x.arc(P+21,y+33,21,0,7);
+  if(it.d){x.fillStyle=t[3];x.fill();x.strokeStyle=t[0];x.beginPath();x.moveTo(P+11,y+33);x.lineTo(P+19,y+42);x.lineTo(P+33,y+24);x.stroke()}else x.stroke();
+  x.globalAlpha=it.d?.45:1;x.fillStyle=t[2];
+  ls.forEach(function(l,k){x.fillText(l,P+80,y+k*66);if(it.d){var w=x.measureText(l).width;x.fillRect(P+80,y+k*66+33,w,3)}});
+  x.globalAlpha=1;y+=h;
+ }
+ if(!tot){x.globalAlpha=.5;x.fillStyle=t[2];x.fillText("No tasks. Enjoy your day.",P,y);x.globalAlpha=1}
+}
+function render(){
+ var ul=$("l");ul.innerHTML="";
+ S.todos.forEach(function(a){
+  var li=document.createElement("li");if(a.d)li.className="d";
+  var cb=document.createElement("input");cb.type="checkbox";cb.checked=a.d;
+  cb.onchange=function(){a.d=cb.checked;changed()};
+  var sp=document.createElement("span");sp.textContent=a.t;
+  sp.ondblclick=function(){var n=prompt("Edit task",a.t);if(n&&n.trim()){a.t=n.trim();changed()}};
+  var b=document.createElement("button");b.className="g";b.textContent="✕";
+  b.onclick=function(){S.todos=S.todos.filter(function(z){return z!==a});changed()};
+  li.append(cb,sp,b);ul.appendChild(li)});
+ $("empty").hidden=S.todos.length>0;
+ draw();
+}
+function dlPNG(){$("c").toBlob(function(b){var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="todo-wallpaper.png";a.click();setTimeout(function(){URL.revokeObjectURL(a.href)},2000)})}
+function changed(){save();render();if(S.auto){clearTimeout(timer);timer=setTimeout(dlPNG,1500)}}
+$("f").onsubmit=function(e){e.preventDefault();var v=$("in").value.trim();if(!v)return;S.todos.push({t:v,d:false});$("in").value="";changed()};
+Object.keys(themes).forEach(function(n){var b=document.createElement("button");b.className="g";b.textContent=n;b.onclick=function(){S.theme=n;changed()};$("th").appendChild(b)});
+$("dl").onclick=dlPNG;
+$("sh").onclick=function(){$("c").toBlob(function(b){var f=new File([b],"todo-wallpaper.png",{type:"image/png"});
+ if(navigator.canShare&&navigator.canShare({files:[f]}))navigator.share({files:[f]}).catch(function(){});else dlPNG()})};
+$("au").checked=S.auto;$("au").onchange=function(){S.auto=this.checked;save()};
+render();
+</script>
+</body>
+</html>
